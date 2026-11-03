@@ -1,46 +1,62 @@
 # POSterm-simulator
 
-A small demo of testing a point-of-sale (POS) payment flow without a physical card terminal.
+Small side project for practicing how I'd test a POS payment flow without needing a real card terminal on my desk.
 
-- `api/`: a tiny Node.js API that simulates the card terminal (no dependencies), with 5 Jest + Supertest tests
-- `web/index.html`: a one-screen React page that pays through the API (React from a CDN, nothing to install)
-- `mobile/App.tsx`: the same screen written in React Native, for running in Expo
-- `e2e/`: 2 end-to-end WebdriverIO tests that drive the web app in Chrome
+There's a tiny Node API that acts like the terminal, a one-page React app that pays through it, and a couple layers of tests on top.
 
-## Run it
+## What's in here
 
-```bash
+- `api/` - the fake terminal. Plain Node, no dependencies. Jest + Supertest tests are in `api/__tests__`.
+- `web/` - single page React app (pulls React from a CDN so there's no build step)
+- `mobile/` - same screen in React Native, if you want to run it with Expo
+- `e2e/` - WebdriverIO tests that click through the web app in Chrome
+
+## Running it
+
+```
 cd api
 npm install
-npm test        # runs the 5 API tests
-npm start       # then open http://localhost:3000
+npm test
+npm start
 ```
 
-## The API
+Then open http://localhost:3000.
 
-| Method | Path | What it does |
-|---|---|---|
-| GET | `/menu` | Menu items with prices in cents |
-| POST | `/tabs` | Open a tab: `{ "items": [{ "itemId": "beer", "quantity": 2 }] }` |
-| POST | `/tabs/:id/pay` | Pay it: `{ "card": "4242424242424242" }` |
+For the WebdriverIO tests:
 
-Card `4242424242424242` is approved (200). Any other card is declined (402). Paying a tab twice returns 409. Bad input gets a 400.
+```
+cd e2e
+npm install
+npm test
+```
 
-## The tests
+They'll start the API on their own if it's not already running. The first run takes a minute because WebdriverIO downloads its own Chrome. If you want to actually watch what it's doing, slow it down with `SLOW=800 npm test`.
 
-**API tests (Jest + Supertest):** `cd api && npm test`
+## How the "terminal" works
 
-1. The menu loads with prices
-2. Opening a tab calculates the right total
-3. A good card pays the tab
-4. A declined card returns 402 and keeps the tab open for a retry
-5. A paid tab can't be charged twice
+Three endpoints:
 
-**End-to-end tests (WebdriverIO):** `cd e2e && npm install && npm test`
+- `GET /menu`
+- `POST /tabs` with something like `{ "items": [{ "itemId": "beer", "quantity": 2 }] }`
+- `POST /tabs/:id/pay` with `{ "card": "4242424242424242" }`
 
-These open the app in a phone-sized Chrome window and click through it like a user. They start the API automatically if it isn't running. Add `HEADLESS=1` to run without a visible browser.
+4242 4242 4242 4242 gets approved, anything else gets declined (402). Trying to pay the same tab twice gets a 409, and junk input gets a 400 instead of taking the server down.
 
-1. A declined card shows a message and keeps the tab open
-2. A good card pays the tab and clears it
+## What the tests cover
 
-The tests use a page object (`e2e/pageobjects/tab.page.js`) and stable `data-testid` selectors. The same structure points at the native app through Appium by swapping the browser settings for iOS and Android ones.
+API (Jest):
+- menu comes back with prices
+- opening a tab gets the total right
+- good card pays the tab
+- declined card returns 402 and leaves the tab open so you can retry
+- a paid tab can't be charged twice (the bug I'd least want to ship)
+
+End to end (WebdriverIO):
+- declined card shows the error and keeps your items
+- good card pays and clears the tab
+
+## If I kept going
+
+- a "terminal timeout" card. If a terminal times out after reading the card, the charge might have actually gone through, so a retry needs to check first
+- Maestro or Appium tests against the native app
+- run all of this in GitHub Actions
