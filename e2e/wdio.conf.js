@@ -26,6 +26,15 @@ export const config = {
   reporters: ['spec'],
   mochaOpts: { timeout: 60000 },
 
+    // Slowmo for watching: SLOW=800 npm test (m/s between actions)
+  beforeCommand: async () => {
+    if (process.env.SLOW) await new Promise((resolve) => setTimeout(resolve, Number(process.env.SLOW)));
+  },
+  // In slow motion, keep the browser open a few seconds at the end
+  after: async () => {
+    if (process.env.SLOW) await new Promise((resolve) => setTimeout(resolve, 3000));
+  },
+
   // Start the API if it isn't already running, and stop it afterward.
   onPrepare: async () => {
     if (await apiIsUp()) return;
