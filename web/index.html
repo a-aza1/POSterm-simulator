@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>POSterm</title>
+  <!-- React from a CDN, so there's nothing to install or build -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; background: #f4f4f5; margin: 0; }
+    .phone { max-width: 380px; margin: 40px auto; background: #fff; border-radius: 24px; padding: 28px; box-shadow: 0 4px 24px rgba(0,0,0,.08); }
+    h1 { margin: 0 0 16px; font-size: 28px; }
+    .row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; cursor: pointer; font-size: 17px; }
+    .total { font-size: 20px; font-weight: 600; margin: 20px 0; }
+    button { width: 100%; padding: 14px; border: 0; border-radius: 10px; color: #fff; font-size: 16px; font-weight: 600; margin-bottom: 10px; cursor: pointer; }
+    button:disabled { opacity: .4; cursor: default; }
+    .good { background: #1a7f37; } .bad { background: #b42318; }
+    .message { font-size: 16px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const GOOD_CARD = '4242424242424242';
+    const DECLINED_CARD = '4000000000000002';
+    const money = (cents) => `$${(cents / 100).toFixed(2)}`;
+
+    function App() {
+      const [menu, setMenu] = useState([]);
+      const [quantities, setQuantities] = useState({});
+      const [message, setMessage] = useState('');
+
+      // Load the menu from the API once, when the page opens.
+      useEffect(() => {
+        fetch('/menu')
+          .then((res) => res.json())
+          .then(setMenu)
+          .catch(() => setMessage('Could not load the menu. Is the API running?'));
+      }, []);
+
+      const total = menu.reduce((sum, item) => sum + item.priceCents * (quantities[item.id] || 0), 0);
+
+      const add = (id) => {
+        setMessage('');
+        setQuantities((q) => ({ ...q, [id]: (q[id] || 0) + 1 }));
+      };
+
+      const pay = async (card) => {
+        const items = Object.entries(quantities).map(([itemId, quantity]) => ({ itemId, quantity }));
+        const tab = await fetch('/tabs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items }),
+        }).then((res) => res.json());
+
+        const res = await fetch(`/tabs/${tab.id}/pay`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ card }),
+        });
+
+        if (res.ok) {
+          setMessage(`Paid ${money(total)}. Thanks!`);
+          setQuantities({});
+        } else {
+          setMessage('Card declined. Try another card.'); // the tab stays so they can retry
+        }
+      };
+
+      return (
+        <div className="phone">
+          <h1>Your Tab</h1>
+          {menu.map((item) => (
+            <MenuRow key={item.id} item={item} quantity={quantities[item.id] || 0} onAdd={() => add(item.id)} />
+          ))}
+          <div className="total" data-testid="total">Total: {money(total)}</div>
+          <button className="good" data-testid="pay-good" disabled={total === 0} onClick={() => pay(GOOD_CARD)}>Pay with good card</button>
+          <button className="bad" data-testid="pay-declined" disabled={total === 0} onClick={() => pay(DECLINED_CARD)}>Pay with declined card</button>
+          {message && <div className="message" data-testid="message">{message}</div>}
+        </div>
+      );
+    }
+
+    // A small component that gets everything through props.
+    function MenuRow({ item, quantity, onAdd }) {
+      return (
+        <div className="row" onClick={onAdd} data-testid={`add-${item.id}`}>
+          <span>{item.name}  {money(item.priceCents)}</span>
+          <span>x{quantity}  +</span>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
